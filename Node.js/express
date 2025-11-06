@@ -1,0 +1,78 @@
+// server.js
+// Simple Express server to accept airdrop submissions and save to CSV.
+// Note: This is a minimal example. For production, add authentication, HTTPS, rate limiting, validation, and secure storage.
+
+const express = require('express');
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+const DATA_FILE = path.join(__dirname, 'submissions.csv');
+
+app.use(express.json());
+
+// Simple CORS for your front-end domain - change origin as needed
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', 'https://your-frontend-domain.com'); // change to actual domain or use '*' temporarily
+  res.header('Access-Control-Allow-Headers', 'Content-Type');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
+
+// ensure CSV file has header
+if (!fs.existsSync(DATA_FILE)) {
+  fs.writeFileSync(DATA_FILE, 'id,timestamp,username,wallet,raw\n', { encoding: 'utf8' });
+}
+
+function isValidEthAddress(addr) {
+  return /^0x[a-fA-F0-9]{40}$/.test(addr);
+}
+
+app.post('/api/submit', (req, res) => {
+  try {
+    const { username, wallet, timestamp } = req.body || {};
+
+    if (!username || !wallet) {
+      return res.status(400).json({ success: false, error: 'missing username or wallet' });
+    }
+
+    // server-side validation: basic checks
+    if (typeof username !== 'string' || username.length > 100) {
+      return res.status(400).json({ success: false, error: 'invalid username' });
+    }
+
+    // You can enforce stricter wallet validation if you only accept specific chains
+    const walletValid = isValidEthAddress(wallet);
+    // If you accept non-eth addresses, adjust validation appropriately
+
+    const id = crypto.randomBytes(8).toString('hex');
+    const ts = timestamp || new Date().toISOString();
+
+    const raw = JSON.stringify(req.body).replace(/"/g, '""'); // escape quotes for CSV
+    const line = `${id},${ts},"${username}","${wallet}","${raw}"\n`;
+
+    // append to CSV
+    fs.appendFile(DATA_FILE, line, (err) => {
+      if (err) {
+        console.error('Failed to save submission', err);
+        return res.status(500).json({ success: false, error: 'failed to save' });
+      }
+      return res.json({ success: true, id });
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'server error' });
+  }
+});
+
+// Simple health check
+app.get('/api/ping', (req, res) => res.json({ ok: true }));
+
+app.listen(PORT, () => {
+  console.log(`Airdrop server listening on port ${PORT}`);
+  console.log(`Data will be appended to ${DATA_FILE}`);
+});
