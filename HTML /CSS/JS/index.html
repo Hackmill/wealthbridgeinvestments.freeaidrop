@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Free Airdrop - Claim</title>
+<style>
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: linear-gradient(120deg,#e6f0ff,#f7fbff);
+    margin: 0;
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .card {
+    width: 420px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(20,30,60,0.08);
+    padding: 28px;
+    text-align: center;
+    animation: floatIn 600ms ease;
+  }
+  h1 { margin: 0 0 14px 0; font-size: 20px; color: #0f1724 }
+  p { margin: 0 0 18px 0; color: #475569; font-size: 14px }
+  .field { margin-bottom: 12px; text-align: left; }
+  label { font-size: 13px; color: #334155; display: block; margin-bottom: 6px; }
+  input[type="text"] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 14px;
+    box-sizing: border-box;
+  }
+  .row { display:flex; gap:10px; }
+  button {
+    flex: 1;
+    padding: 11px 14px;
+    border-radius: 8px;
+    border: none;
+    background: #2563eb;
+    color: white;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button.secondary {
+    background: #f1f5f9;
+    color: #0f1724;
+    border: 1px solid #e2e8f0;
+  }
+  .status {
+    margin-top: 14px;
+    font-size: 13px;
+    color: #0f1724;
+    min-height: 18px;
+    word-break: break-word;
+  }
+  @keyframes floatIn {
+    from { opacity: 0; transform: translateY(10px) }
+    to { opacity: 1; transform: translateY(0) }
+  }
+  .small { font-size: 12px; color: #64748b; margin-top: 12px }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Free Airdrop Claim</h1>
+    <p>Enter your public username and wallet address to claim. We store this on our server for verification.</p>
+
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" type="text" placeholder="Your display name">
+    </div>
+
+    <div class="field">
+      <label for="wallet">Wallet address (public)</label>
+      <input id="wallet" type="text" placeholder="0x... or paste your public address">
+    </div>
+
+    <div style="display:flex; gap:10px; margin-top:8px;">
+      <button id="connectBtn" class="secondary" type="button">Connect MetaMask</button>
+      <button id="submitBtn" type="button">Submit to Company</button>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div class="small">By submitting you consent to share this public info with the company. Do not paste private keys or seed phrases.</div>
+  </div>
+
+<script>
+const serverEndpoint = "https://your-company-server.com/api/submit"; // change to your server
+
+const statusEl = document.getElementById('status');
+const walletInput = document.getElementById('wallet');
+const usernameInput = document.getElementById('username');
+const connectBtn = document.getElementById('connectBtn');
+const submitBtn = document.getElementById('submitBtn');
+
+function showStatus(msg, isError=false) {
+  statusEl.textContent = msg;
+  statusEl.style.color = isError ? '#b91c1c' : '#0f1724';
+}
+
+// MetaMask connect (public address only)
+async function connectMetaMask() {
+  if (!window.ethereum) {
+    showStatus('MetaMask not found in this browser', true);
+    return;
+  }
+  try {
+    const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+    if (accounts && accounts[0]) {
+      walletInput.value = accounts[0];
+      showStatus('Wallet connected locally');
+    } else {
+      showStatus('No account returned', true);
+    }
+  } catch (err) {
+    console.error(err);
+    showStatus('User rejected wallet connection or an error occurred', true);
+  }
+}
+
+connectBtn.addEventListener('click', connectMetaMask);
+
+// Submit to company server
+async function submitToServer() {
+  const username = usernameInput.value.trim();
+  const wallet = walletInput.value.trim();
+
+  if (!username) { showStatus('Please enter a username', true); return; }
+  if (!wallet) { showStatus('Please enter or connect your public wallet address', true); return; }
+
+  // Basic client-side validation: ensure wallet looks like an address
+  // This is not foolproof — validate on server too
+  const ethLike = /^0x[a-fA-F0-9]{40}$/.test(wallet);
+  if (!ethLike) {
+    showStatus('Warning: wallet address does not look like a standard ETH address. Server will validate', false);
+  }
+
+  showStatus('Sending data to server...');
+  try {
+    const payload = { username, wallet, timestamp: new Date().toISOString() };
+    const res = await fetch(serverEndpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      mode: 'cors'
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      showStatus('Server error: ' + (errorText || res.statusText), true);
+      return;
+    }
+
+    const json = await res.json();
+    if (json && json.success) {
+      showStatus('Submitted successfully. Reference: ' + (json.id || 'none'));
+      // Optionally clear form after success
+      // usernameInput.value = '';
+      // walletInput.value = '';
+    } else {
+      showStatus('Submission rejected by server', true);
+    }
+  } catch (err) {
+    console.error(err);
+    showStatus('Network error when sending to server', true);
+  }
+}
+
+submitBtn.addEventListener('click', submitToServer);
+</script>
+</body>
+</html>
